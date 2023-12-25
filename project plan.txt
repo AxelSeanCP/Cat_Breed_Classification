@@ -1,0 +1,11 @@
+# use transfer learning from MobileNetV2
+
+# resize all the images to preserve aspect ratio so that the information within the images is not lost
+- to resize image you can use Python Imaging Library (PIL) or other image processing libraries before using them with ImageDataGenerator
+
+# implement custom callbacks
+- the custom callbacks criteria are : 
+1. stop when model acc & val_acc are above 92%
+2. stop when model acc & val_acc are not improving within decided epochs
+3. stop when model loss & val_loss are not improving within decided epochs
+4. stop when model loss & val_loss are above 80% within decided epochs
