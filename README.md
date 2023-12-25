@@ -1,5 +1,10 @@
 # ML-ImageClassification
-A machine learning project for image classification from dicoding machine learning course
+A machine learning image classification project to detect cat breeds from dicoding machine learning course
+
+## Dataset
+* source : [oxford-iit-cats-extended-10k](https://www.kaggle.com/datasets/doctrinek/oxford-iiit-cats-extended-10k)
+* about : this dataset contains 12 differents cat breeds
+* samples : 10k images in total from 12 subfolders (class), all the images have different image resolution
 
 ## Criteria
 - free dataset with **1000 images minimum**
