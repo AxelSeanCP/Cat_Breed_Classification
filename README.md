@@ -18,6 +18,6 @@ A machine learning image classification project to detect cat breeds from dicodi
 - create code to save model in **TFLite** format
 
 ## Optional criteria (5*)
-- dataset has minimum **10000 images**
+- dataset has minimum **10000 images** and **3 class**
 - image resolution in dataset is not constant (varies)
 - accuracy on training and validation set is **92% minimum**

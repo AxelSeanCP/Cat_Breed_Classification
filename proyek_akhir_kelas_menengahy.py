@@ -13,6 +13,7 @@ Original file is located at
 
 # import the kaggle.json from kaggle API into colab
 # do this command
+
 # install kaggle library
 !pip install kaggle
 # make a directory named .kaggle
@@ -25,16 +26,19 @@ Original file is located at
 !kaggle datasets download doctrinek/oxford-iiit-cats-extended-10k
 
 !pip install split-folders
+!pip install pillow
 
 """### import libraries"""
 
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Dense, Flatten, Dropout, Conv2D, MaxPooling2D
+from tensorflow.keras.layers import Dense, Flatten, Dropout, Conv2D, MaxPooling2D, Input
+from tensorflow.keras.models import Model
 import numpy as np
 import matplotlib.pyplot as plt
 import pathlib, zipfile, os, splitfolders
+from PIL import Image
 
 """### extract zip file"""
 
@@ -45,10 +49,45 @@ zip_read.close()
 
 os.listdir('/content/dataset/')
 
+"""### resize all the images"""
+
+original_dir = '/content/dataset/CatBreedsRefined-v3'
+resized_dir = '/content/dataset/resized'
+
+import shutil
+shutil.rmtree(resized_dir)
+
+os.makedirs(resized_dir, exist_ok=True)
+
+target_size=(250,250)
+for folder in os.listdir(original_dir):
+  sub_dir = os.path.join(original_dir, folder)
+  resized_img_path = os.path.join(resized_dir, folder)
+  os.makedirs(resized_img_path, exist_ok=True)
+
+  for filename in os.listdir(sub_dir):
+    if filename.endswith(('.jpg', '.jpeg', '.png')):
+      image_path = os.path.join(sub_dir, filename)
+      try:
+        img = Image.open(image_path)
+      except Exception as e:
+        print(f"error opening image {filename} : {e}")
+        continue
+
+      resized_img = img.resize(target_size, Image.ANTIALIAS)
+      save_path = os.path.join(resized_img_path, filename)
+
+      try:
+        resized_img.save(save_path, 'jpeg')
+      except Exception as e:
+        print(f"error saving resized image {filename} : {e}")
+        break
+
+os.listdir(resized_dir)
+
 """### split into train and validation"""
 
-base_dir = '/content/dataset/CatBreedsRefined-v3'
-splitfolders.ratio(base_dir, output='/content/dataset/project', seed=6969, ratio=(0.8, 0.2))
+splitfolders.ratio(resized_dir, output='/content/dataset/project', seed=6969, ratio=(0.8, 0.2))
 train_dir = '/content/dataset/project/train'
 validation_dir = '/content/dataset/project/val'
 
@@ -70,3 +109,108 @@ print(f"Which in total makes it {train_sample_length + validation_sample_length}
 
 """# Preprocess Data"""
 
+train_datagen = ImageDataGenerator(
+    rescale = 1.0/255,
+    shear_range=0.2,
+    zoom_range=0.2,
+    rotation_range=30,
+    horizontal_flip=True,
+    vertical_flip=True,
+    fill_mode='nearest',
+    width_shift_range=0.2,
+    height_shift_range=0.2
+)
+
+train_generator = train_datagen.flow_from_directory(
+    train_dir,
+    class_mode='categorical',
+    target_size=target_size
+)
+
+validation_datagen = ImageDataGenerator(
+    rescale=1.0/255
+)
+
+validation_generator = validation_datagen.flow_from_directory(
+    validation_dir,
+    class_mode='categorical',
+    target_size=target_size
+)
+
+"""# Model Creation
+
+### callback function
+"""
+
+class SantaiDuluGakSih(tf.keras.callbacks.Callback):
+  def __init__(self, sabar_acc=10, sabar_loss=10):
+    super(SantaiDuluGakSih, self).__init__()
+    self.sabar_acc = sabar_acc
+    self.sabar_loss = sabar_loss
+    self.limit_acc = sabar_acc
+    self.limit_loss = sabar_loss
+    self.max_acc = 0
+    self.max_val_acc = 0
+
+  def on_epoch_end(self, epoch, logs={}):
+    self.max_acc = logs.get('accuracy') if logs.get('accuracy') > self.max_acc else self.max_acc
+
+    self.max_val_acc = logs.get('val_accuracy') if logs.get('val_accuracy') > self.max_val_acc else self.max_val_acc
+
+    if logs.get('accuracy')<self.max_acc and logs.get('val_accuracy')<self.max_val_acc:
+      self.sabar_acc -= 1
+    else:
+      self.sabar_acc += 1
+
+    if logs.get('loss')>0.75 or logs.get('val_loss')>0.75:
+      self.sabar_loss -= 1
+    else:
+      self.sabar_loss += 1
+
+    if self.sabar_acc == 0:
+      print(f"The model accuracy has been below {self.max_acc} for {self.limit_acc} epochs, Stopping training immediatly!!!")
+      self.model.stop_training = True
+    elif self.sabar_loss == 0:
+      print(f"The model loss has been above 75% for {self.limit_loss} epochs, Stopping training immediatly!!!")
+      self.model.stop_training = True
+    elif self.max_acc >= 0.92 and self.max_val_acc >= 0.92:
+      print(f"The model accuracy has reached 92%, stopping training")
+      self.model.stop_training = True
+
+"""### transfer learning using MobileNetV2"""
+
+pre_trained_model = MobileNetV2(weights="imagenet", include_top=False, input_tensor=Input(shape=(250,250,3)))
+
+for layer in pre_trained_model.layers:
+  layer.trainable = False
+
+last_output = pre_trained_model.output
+
+x = Conv2D(32, (3,3), activation="relu")(last_output)
+x = MaxPooling2D(2,2)(x)
+x = Dropout(0.4)(x)
+
+x = Flatten()(x)
+x = Dense(128, activation="relu")(x)
+x = Dense(32, activation="relu")(x)
+output_layer = Dense(12, activation="softmax")(x)
+
+model = Model(inputs=pre_trained_model.input, outputs=output_layer)
+
+model.summary()
+
+int_lr = 1e-4
+model.compile(
+    optimizer=tf.optimizers.Adam(learning_rate=int_lr),
+    loss='categorical_crossentropy',
+    metrics=['accuracy']
+)
+
+berhenti_bang = SantaiDuluGakSih(sabar_acc=10, sabar_loss=15)
+model.fit(
+    train_generator,
+    epochs=30,
+    validation_data=validation_generator,
+    callbacks=[berhenti_bang],
+    verbose=2
+)
