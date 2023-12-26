@@ -37,8 +37,21 @@ from tensorflow.keras.layers import Dense, Flatten, Dropout, Conv2D, MaxPooling2
 from tensorflow.keras.models import Model
 import numpy as np
 import matplotlib.pyplot as plt
-import pathlib, zipfile, os, splitfolders
+import pathlib, zipfile, os, splitfolders, datetime
 from PIL import Image
+
+"""### setup tensorboard"""
+
+# Commented out IPython magic to ensure Python compatibility.
+# %load_ext tensorboard
+
+log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+
+!rm -rf ./logs/
+
+tf.summary.create_file_writer("./logs/")
+
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
 """### extract zip file"""
 
@@ -54,12 +67,15 @@ os.listdir('/content/dataset/')
 original_dir = '/content/dataset/CatBreedsRefined-v3'
 resized_dir = '/content/dataset/resized'
 
-import shutil
-shutil.rmtree(resized_dir)
+if os.path.exists(resized_dir):
+  import shutil
+  shutil.rmtree(resized_dir)
+
 
 os.makedirs(resized_dir, exist_ok=True)
 
-target_size=(250,250)
+target_size=(224,224)
+
 for folder in os.listdir(original_dir):
   sub_dir = os.path.join(original_dir, folder)
   resized_img_path = os.path.join(resized_dir, folder)
@@ -109,22 +125,21 @@ print(f"Which in total makes it {train_sample_length + validation_sample_length}
 
 """# Preprocess Data"""
 
+batch_size = 64
+
 train_datagen = ImageDataGenerator(
     rescale = 1.0/255,
-    shear_range=0.2,
+    shear_range=0.15,
     zoom_range=0.2,
-    rotation_range=30,
     horizontal_flip=True,
-    vertical_flip=True,
-    fill_mode='nearest',
-    width_shift_range=0.2,
-    height_shift_range=0.2
+    fill_mode='nearest'
 )
 
 train_generator = train_datagen.flow_from_directory(
     train_dir,
     class_mode='categorical',
-    target_size=target_size
+    target_size=target_size,
+    batch_size=batch_size
 )
 
 validation_datagen = ImageDataGenerator(
@@ -134,12 +149,16 @@ validation_datagen = ImageDataGenerator(
 validation_generator = validation_datagen.flow_from_directory(
     validation_dir,
     class_mode='categorical',
-    target_size=target_size
+    target_size=target_size,
+    batch_size=batch_size
 )
 
 """# Model Creation
 
 ### callback function
+- stops when acc & val_acc is >= 92%
+- stops when acc / val_acc < max_acc for limit_acc epochs
+- stops when loss / val_loss > 0.75 for limit_loss epochs
 """
 
 class SantaiDuluGakSih(tf.keras.callbacks.Callback):
@@ -157,7 +176,7 @@ class SantaiDuluGakSih(tf.keras.callbacks.Callback):
 
     self.max_val_acc = logs.get('val_accuracy') if logs.get('val_accuracy') > self.max_val_acc else self.max_val_acc
 
-    if logs.get('accuracy')<self.max_acc and logs.get('val_accuracy')<self.max_val_acc:
+    if logs.get('accuracy')<self.max_acc or logs.get('val_accuracy')<self.max_val_acc:
       self.sabar_acc -= 1
     else:
       self.sabar_acc += 1
@@ -179,7 +198,11 @@ class SantaiDuluGakSih(tf.keras.callbacks.Callback):
 
 """### transfer learning using MobileNetV2"""
 
-pre_trained_model = MobileNetV2(weights="imagenet", include_top=False, input_tensor=Input(shape=(250,250,3)))
+pre_trained_model = MobileNetV2(
+    weights="imagenet",
+    include_top=False,
+    input_tensor=Input(shape=(224,224,3))
+)
 
 for layer in pre_trained_model.layers:
   layer.trainable = False
@@ -206,11 +229,42 @@ model.compile(
     metrics=['accuracy']
 )
 
-berhenti_bang = SantaiDuluGakSih(sabar_acc=10, sabar_loss=15)
-model.fit(
+berhenti_bang = SantaiDuluGakSih(sabar_acc=5, sabar_loss=10)
+modelku = model.fit(
     train_generator,
     epochs=30,
     validation_data=validation_generator,
-    callbacks=[berhenti_bang],
+    callbacks=[berhenti_bang, tensorboard_callback],
     verbose=2
 )
+
+"""# Model evaluation
+
+### plot loss and accuracy
+"""
+
+# plot loss
+plt.plot(modelku.history['loss'])
+plt.plot(modelku.history['val_loss'])
+plt.title('Model loss')
+plt.ylabel('Loss')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Validation'], loc='upper right')
+plt.show()
+
+# plot acc
+plt.plot(modelku.history['accuracy'])
+plt.plot(modelku.history['val_accuracy'])
+plt.title('Model accuracy')
+plt.ylabel('Accuracy')
+plt.xlabel('Epoch')
+plt.legend(['Train', 'Validation'], loc='lower right')
+plt.show()
+
+"""### show tensorboard"""
+
+# Commented out IPython magic to ensure Python compatibility.
+# %tensorboard --logdir logs/fit
+
+"""# Save model"""
+
