@@ -9,3 +9,9 @@
 2. stop when model acc & val_acc are not improving within decided epochs
 3. stop when model loss & val_loss are not improving within decided epochs
 4. stop when model loss & val_loss are above 80% within decided epochs
+
+
+# What to do next?
+- change image data augmentation to improve acc
+- add more neurons in the model layers
+- change model optimizer
