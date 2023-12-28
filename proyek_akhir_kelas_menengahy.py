@@ -127,12 +127,15 @@ print(f"Which in total makes it {train_sample_length + validation_sample_length}
 
 """# Preprocess Data"""
 
-batch_size = 48
+batch_size = 128
 
 train_datagen = ImageDataGenerator(
     rescale = 1.0/255,
-    shear_range=0.15,
-    zoom_range=0.2,
+    #shear_range=0.2,
+    #width_shift_range=0.1,
+    #height_shift_range=0.1,
+    channel_shift_range=0.2,
+    #rotation_range=20,
     horizontal_flip=True,
     fill_mode='nearest'
 )
@@ -178,10 +181,10 @@ class SantaiDuluGakSih(tf.keras.callbacks.Callback):
 
     self.max_val_acc = logs.get('val_accuracy') if logs.get('val_accuracy') > self.max_val_acc else self.max_val_acc
 
-    if logs.get('accuracy')<self.max_acc or logs.get('val_accuracy')<self.max_val_acc:
-      self.sabar_acc -= 1
+    if logs.get('accuracy')>=self.max_acc and logs.get('val_accuracy')>=self.max_val_acc:
+      self.sabar_acc = self.limit_acc
     else:
-      self.sabar_acc += 1
+      self.sabar_acc -= 1
 
     if logs.get('loss')>0.75 or logs.get('val_loss')>0.75:
       self.sabar_loss -= 1
@@ -189,7 +192,7 @@ class SantaiDuluGakSih(tf.keras.callbacks.Callback):
       self.sabar_loss += 1
 
     if self.sabar_acc == 0:
-      print(f"The model accuracy has been below {self.max_acc} for {self.limit_acc} epochs, Stopping training immediatly!!!")
+      print(f"The model accuracy has been below {self.max_acc} and {self.max_val_acc} for {self.limit_acc} epochs, Stopping training immediatly!!!")
       self.model.stop_training = True
     elif self.sabar_loss == 0:
       print(f"The model loss has been above 75% for {self.limit_loss} epochs, Stopping training immediatly!!!")
@@ -200,7 +203,7 @@ class SantaiDuluGakSih(tf.keras.callbacks.Callback):
 
 """### transfer learning using MobileNetV2"""
 
-pre_trained_model = MobileNetV2(
+'''pre_trained_model = MobileNetV2(
     weights="imagenet",
     include_top=False,
     input_tensor=Input(shape=(224,224,3))
@@ -209,25 +212,52 @@ pre_trained_model = MobileNetV2(
 for layer in pre_trained_model.layers:
   layer.trainable = False
 
-last_output = pre_trained_model.output
+last_output = pre_trained_model.output'''
 
-x = Conv2D(32, (3,3), activation="relu")(last_output)
+'''x = Conv2D(32, (3,3), activation="relu")(last_output)
 x = MaxPooling2D(2,2)(x)
 x = Dropout(0.4)(x)
 
 x = Flatten()(x)
+#x = Dense(512, activation="relu")(x)
+x = Dense(256, activation="relu")(x)
 x = Dense(128, activation="relu")(x)
-x = Dense(64, activation="relu")(x)
-x = Dense(32, activation="relu")(x)
+#x = Dense(64, activation="relu")(x)
+#x = Dense(32, activation="relu")(x)
+#x = Dense(16, activation="relu")(x)
 output_layer = Dense(12, activation="softmax")(x)
 
 model = Model(inputs=pre_trained_model.input, outputs=output_layer)
 
+model.summary()'''
+
+"""### without transfer learning"""
+
+model = tf.keras.models.Sequential([
+    Conv2D(128, (3,3), activation='relu', input_shape=(224,224,3)),
+    MaxPooling2D(2,2),
+    Conv2D(64, (3,3), activation='relu'),
+    MaxPooling2D(2,2),
+    Dropout(0.2),
+    Conv2D(128, (3,3), activation='relu'),
+    MaxPooling2D(2,2),
+    Dropout(0.2),
+    Conv2D(64, (3,3), activation='relu'),
+    MaxPooling2D(2,2),
+    Dropout(0.2),
+
+    Flatten(),
+    #Dense(512, activation='relu'),
+    Dense(256, activation='relu'),
+
+    Dense(12, activation='softmax')
+])
+
 model.summary()
 
-int_lr = 1e-4
+int_lr = 1e-2
 model.compile(
-    optimizer=tf.optimizers.Adam(learning_rate=int_lr),
+    optimizer=tf.optimizers.RMSprop(learning_rate=int_lr),
     loss='categorical_crossentropy',
     metrics=['accuracy']
 )
@@ -235,8 +265,10 @@ model.compile(
 berhenti_bang = SantaiDuluGakSih(sabar_acc=3, sabar_loss=10)
 modelku = model.fit(
     train_generator,
-    epochs=30,
+    epochs=10,
+    #steps_per_epoch=30,
     validation_data=validation_generator,
+    #validation_steps=20,
     callbacks=[berhenti_bang, tensorboard_callback],
     verbose=2
 )
@@ -271,3 +303,13 @@ plt.show()
 
 """# Save model"""
 
+# menyimpan model dalam format saved model
+export_dir = 'saved_model/'
+tf.saved_model.save(model, export_dir)
+
+# convert SavedModel menjadi vegs.tflite
+converter = tf.lite.TFLiteConverter.from_saved_model(export_dir)
+tflite_model = converter.convert()
+
+tflite_model_file = pathlib.Path('vegs.tflite')
+tflite_model_file.write_bytes(tflite_model)
