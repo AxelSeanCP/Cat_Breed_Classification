@@ -64,48 +64,14 @@ zip_read.close()
 
 os.listdir('/content/dataset/')
 
-"""### resize all the images"""
+"""### resize all the images
+
+### split into train and validation
+"""
 
 original_dir = '/content/dataset/CatBreedsRefined-v3'
-resized_dir = '/content/dataset/resized'
 
-if os.path.exists(resized_dir):
-  import shutil
-  shutil.rmtree(resized_dir)
-
-
-os.makedirs(resized_dir, exist_ok=True)
-
-target_size=(224,224)
-
-for folder in os.listdir(original_dir):
-  sub_dir = os.path.join(original_dir, folder)
-  resized_img_path = os.path.join(resized_dir, folder)
-  os.makedirs(resized_img_path, exist_ok=True)
-
-  for filename in os.listdir(sub_dir):
-    if filename.endswith(('.jpg', '.jpeg', '.png')):
-      image_path = os.path.join(sub_dir, filename)
-      try:
-        img = Image.open(image_path)
-      except Exception as e:
-        print(f"error opening image {filename} : {e}")
-        continue
-
-      resized_img = img.resize(target_size, Image.ANTIALIAS)
-      save_path = os.path.join(resized_img_path, filename)
-
-      try:
-        resized_img.save(save_path, 'jpeg')
-      except Exception as e:
-        print(f"error saving resized image {filename} : {e}")
-        break
-
-os.listdir(resized_dir)
-
-"""### split into train and validation"""
-
-splitfolders.ratio(resized_dir, output='/content/dataset/project', seed=6969, ratio=(0.8, 0.2))
+splitfolders.ratio(original_dir, output='/content/dataset/project', seed=6969, ratio=(0.8, 0.2))
 train_dir = '/content/dataset/project/train'
 validation_dir = '/content/dataset/project/val'
 
@@ -127,13 +93,14 @@ print(f"Which in total makes it {train_sample_length + validation_sample_length}
 
 """# Preprocess Data"""
 
-batch_size = 128
+batch_size = 48
+target_size=(224,224)
 
 train_datagen = ImageDataGenerator(
     rescale = 1.0/255,
-    #shear_range=0.2,
-    #width_shift_range=0.1,
-    #height_shift_range=0.1,
+    shear_range=0.2,
+    width_shift_range=0.2,
+    height_shift_range=0.2,
     channel_shift_range=0.2,
     #rotation_range=20,
     horizontal_flip=True,
@@ -203,7 +170,9 @@ class SantaiDuluGakSih(tf.keras.callbacks.Callback):
 
 """### transfer learning using MobileNetV2"""
 
-'''pre_trained_model = MobileNetV2(
+model = tf.keras.Sequential()
+
+pre_trained_model = MobileNetV2(
     weights="imagenet",
     include_top=False,
     input_tensor=Input(shape=(224,224,3))
@@ -212,52 +181,23 @@ class SantaiDuluGakSih(tf.keras.callbacks.Callback):
 for layer in pre_trained_model.layers:
   layer.trainable = False
 
-last_output = pre_trained_model.output'''
+model.add(pre_trained_model)
 
-'''x = Conv2D(32, (3,3), activation="relu")(last_output)
-x = MaxPooling2D(2,2)(x)
-x = Dropout(0.4)(x)
-
-x = Flatten()(x)
-#x = Dense(512, activation="relu")(x)
-x = Dense(256, activation="relu")(x)
-x = Dense(128, activation="relu")(x)
-#x = Dense(64, activation="relu")(x)
-#x = Dense(32, activation="relu")(x)
-#x = Dense(16, activation="relu")(x)
-output_layer = Dense(12, activation="softmax")(x)
-
-model = Model(inputs=pre_trained_model.input, outputs=output_layer)
-
-model.summary()'''
-
-"""### without transfer learning"""
-
-model = tf.keras.models.Sequential([
-    Conv2D(128, (3,3), activation='relu', input_shape=(224,224,3)),
-    MaxPooling2D(2,2),
-    Conv2D(64, (3,3), activation='relu'),
-    MaxPooling2D(2,2),
-    Dropout(0.2),
-    Conv2D(128, (3,3), activation='relu'),
-    MaxPooling2D(2,2),
-    Dropout(0.2),
-    Conv2D(64, (3,3), activation='relu'),
-    MaxPooling2D(2,2),
-    Dropout(0.2),
-
-    Flatten(),
-    #Dense(512, activation='relu'),
-    Dense(256, activation='relu'),
-
-    Dense(12, activation='softmax')
-])
+model.add(Conv2D(128, (3,3), activation="relu"))
+model.add(MaxPooling2D(2,2))
+model.add(Dropout(0.3))
+model.add(Flatten())
+model.add(Dense(512, activation="relu"))
+model.add(Dense(256, activation="relu"))
+model.add(Dense(160, activation="relu"))
+model.add(Dense(128, activation="relu"))
+model.add(Dense(12, activation="softmax"))
 
 model.summary()
 
-int_lr = 1e-2
+int_lr = 1e-3
 model.compile(
-    optimizer=tf.optimizers.RMSprop(learning_rate=int_lr),
+    optimizer=tf.optimizers.Adam(learning_rate=int_lr),
     loss='categorical_crossentropy',
     metrics=['accuracy']
 )
@@ -265,10 +205,8 @@ model.compile(
 berhenti_bang = SantaiDuluGakSih(sabar_acc=3, sabar_loss=10)
 modelku = model.fit(
     train_generator,
-    epochs=10,
-    #steps_per_epoch=30,
+    epochs=20,
     validation_data=validation_generator,
-    #validation_steps=20,
     callbacks=[berhenti_bang, tensorboard_callback],
     verbose=2
 )
