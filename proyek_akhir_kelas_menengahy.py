@@ -91,18 +91,26 @@ print(f"The train directory has {train_sample_length} samples")
 print(f"The validation directory has {validation_sample_length} samples")
 print(f"Which in total makes it {train_sample_length + validation_sample_length} samples")
 
-"""# Preprocess Data"""
+"""# Preprocess Data
+```
+rescale = 1.0/255,
+shear_range=0.2,
+zoom_range=0.2,
+width_shift_range=0.2,
+height_shift_range=0.2,
+channel_shift_range=0.2,
+horizontal_flip=True,
+fill_mode='nearest'
+```
+"""
 
-batch_size = 48
+batch_size = 16
 target_size=(224,224)
 
 train_datagen = ImageDataGenerator(
     rescale = 1.0/255,
     shear_range=0.2,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
     channel_shift_range=0.2,
-    #rotation_range=20,
     horizontal_flip=True,
     fill_mode='nearest'
 )
@@ -172,6 +180,7 @@ class SantaiDuluGakSih(tf.keras.callbacks.Callback):
 
 model = tf.keras.Sequential()
 
+# add mobile net as base layer
 pre_trained_model = MobileNetV2(
     weights="imagenet",
     include_top=False,
@@ -181,31 +190,35 @@ pre_trained_model = MobileNetV2(
 for layer in pre_trained_model.layers:
   layer.trainable = False
 
+"""for layer in pre_trained_model.layers[-5:]:
+  layer.trainable = True"""
+
 model.add(pre_trained_model)
 
-model.add(Conv2D(128, (3,3), activation="relu"))
+# add custom layers
+model.add(Dropout(0.3))
+model.add(Conv2D(64, (3,3), activation="relu"))
 model.add(MaxPooling2D(2,2))
 model.add(Dropout(0.3))
 model.add(Flatten())
-model.add(Dense(512, activation="relu"))
-model.add(Dense(256, activation="relu"))
-model.add(Dense(160, activation="relu"))
-model.add(Dense(128, activation="relu"))
+model.add(Dense(256, activation="relu", kernel_regularizer=tf.keras.regularizers.l2(0.001)))
+model.add(Dense(64, activation="relu"))
 model.add(Dense(12, activation="softmax"))
 
 model.summary()
 
 int_lr = 1e-3
+#lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(initial_learning_rate=int_lr, decay_steps=1000, decay_rate=0.9)
 model.compile(
     optimizer=tf.optimizers.Adam(learning_rate=int_lr),
     loss='categorical_crossentropy',
     metrics=['accuracy']
 )
 
-berhenti_bang = SantaiDuluGakSih(sabar_acc=3, sabar_loss=10)
+berhenti_bang = SantaiDuluGakSih(sabar_acc=10, sabar_loss=10)
 modelku = model.fit(
     train_generator,
-    epochs=20,
+    epochs=30,
     validation_data=validation_generator,
     callbacks=[berhenti_bang, tensorboard_callback],
     verbose=2
