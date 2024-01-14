@@ -78,8 +78,8 @@ class_names = train_dataset.class_names
 
 plt.figure(figsize=(10,10))
 for images, labels in train_dataset.take(1):
-  for i in range(9):
-    ax = plt.subplot(3, 3, i + 1)
+  for i in range(12):
+    ax = plt.subplot(4, 4, i + 1)
     plt.imshow(images[i].numpy().astype("uint8"))
     plt.title(class_names[labels[i]])
     plt.axis("off")
@@ -214,6 +214,7 @@ model.add(Conv2D(64, (3,3), activation=tf.nn.relu))
 model.add(MaxPooling2D(2,2))
 model.add(Dropout(0.4))
 model.add(GlobalAveragePooling2D())
+model.add(Dense(256, activation=tf.nn.relu))
 model.add(Dense(12, activation=tf.nn.softmax))
 
 model.summary()
@@ -232,8 +233,12 @@ loss0, acc0 = model.evaluate(validation_dataset)
 modelku = model.fit(
     train_dataset,
     epochs=initial_epochs,
-    validation_data=validation_dataset
+    validation_data=validation_dataset,
+    verbose=2,
+    callbacks=[stop_early, reduce_lr, lr_log]
 )
+
+"""### plot transfer learning"""
 
 acc = modelku.history['accuracy']
 val_acc = modelku.history['val_accuracy']
@@ -247,7 +252,6 @@ plt.plot(acc, label='Training Accuracy')
 plt.plot(val_acc, label='Validation Accuracy')
 plt.legend(loc='lower right')
 plt.ylabel('Accuracy')
-plt.ylim([min(plt.ylim()),1])
 plt.title('Training and Validation Accuracy')
 
 plt.subplot(2, 1, 2)
@@ -255,7 +259,6 @@ plt.plot(loss, label='Training Loss')
 plt.plot(val_loss, label='Validation Loss')
 plt.legend(loc='upper right')
 plt.ylabel('Cross Entropy')
-plt.ylim([0,1.0])
 plt.title('Training and Validation Loss')
 plt.xlabel('epoch')
 plt.show()
@@ -291,6 +294,8 @@ modelku_fine = model.fit(
     callbacks=[stop_early, reduce_lr, lr_log]
 )
 
+"""### plot fine tuning"""
+
 acc += modelku_fine.history['accuracy']
 val_acc += modelku_fine.history['val_accuracy']
 
@@ -301,7 +306,6 @@ plt.figure(figsize=(8, 8))
 plt.subplot(2, 1, 1)
 plt.plot(acc, label='Training Accuracy')
 plt.plot(val_acc, label='Validation Accuracy')
-plt.ylim([0.8, 1])
 plt.plot([initial_epochs-1,initial_epochs-1],
           plt.ylim(), label='Start Fine Tuning')
 plt.legend(loc='lower right')
@@ -310,7 +314,6 @@ plt.title('Training and Validation Accuracy')
 plt.subplot(2, 1, 2)
 plt.plot(loss, label='Training Loss')
 plt.plot(val_loss, label='Validation Loss')
-plt.ylim([0, 1.0])
 plt.plot([initial_epochs-1,initial_epochs-1],
          plt.ylim(), label='Start Fine Tuning')
 plt.legend(loc='upper right')
@@ -318,5 +321,53 @@ plt.title('Training and Validation Loss')
 plt.xlabel('epoch')
 plt.show()
 
+"""# model evaluation"""
+
 loss, accuracy = model.evaluate(validation_dataset)
-print('Test accuracy :', accuracy)
+print('Validation accuracy :', accuracy)
+
+# Commented out IPython magic to ensure Python compatibility.
+from google.colab import files
+from tensorflow.keras.preprocessing import image
+import matplotlib.image as mpimg
+# %matplotlib inline
+
+uploaded = files.upload()
+
+class_labels = ['Abyssinian', 'Bengal', 'Birman', 'Bombay', 'British Shorthair', 'Egyptian Mau',
+                'Maine Coon', 'Persian', 'Ragdoll', 'Russian Blue', 'Siamese', 'Sphynx']
+
+for fn in uploaded.keys():
+
+  #predict gambar
+  path = fn
+  img = image.load_img(path, target_size=IMG_SIZE)
+
+  imgplot = plt.imshow(img)
+  plt.show()
+
+  x = image.img_to_array(img)
+  x = np.expand_dims(x, axis=0)
+  images = np.vstack([x])
+
+  classes = model.predict(images, batch_size=10)
+  predicted_index = np.argmax(classes)
+  confidence_score = classes[0][predicted_index]
+
+  predicted_label = class_labels[predicted_index]
+
+  print(f"Predicted Class: {predicted_label}")
+  print(f"Confidence Score: {confidence_score}")
+
+"""# Save Model"""
+
+# menyimpan model dalam format saved model
+export_dir = 'saved_model/'
+tf.saved_model.save(model, export_dir)
+
+# convert SavedModel menjadi vegs.tflite
+converter = tf.lite.TFLiteConverter.from_saved_model(export_dir)
+tflite_model = converter.convert()
+
+tflite_model_file = pathlib.Path('vegs.tflite')
+tflite_model_file.write_bytes(tflite_model)
