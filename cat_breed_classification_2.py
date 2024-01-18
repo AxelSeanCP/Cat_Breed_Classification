@@ -116,7 +116,8 @@ data_augmentation = tf.keras.Sequential([
     tf.keras.layers.RandomRotation(factor=0.2),
     tf.keras.layers.RandomZoom(width_factor=0.2, height_factor=0.2),
     tf.keras.layers.RandomWidth(factor=0.2),
-    tf.keras.layers.RandomHeight(factor=0.2)
+    tf.keras.layers.RandomHeight(factor=0.2),
+    tf.keras.layers.RandomBrightness(factor=0.1)
 ])
 
 """### visualize data augmentation"""
@@ -140,42 +141,16 @@ rescale = tf.keras.layers.Rescaling(1./127.5, offset=-1)
 ### callback functions
 """
 
-class SantaiDuluGakSih(tf.keras.callbacks.Callback):
-  def __init__(self, sabar_acc=10, sabar_loss=10):
-    super(SantaiDuluGakSih, self).__init__()
-    self.sabar_acc = sabar_acc
-    self.sabar_loss = sabar_loss
-    self.limit_acc = sabar_acc
-    self.limit_loss = sabar_loss
-    self.max_acc = 0
-    self.max_val_acc = 0
-
+class SudahWoi(tf.keras.callbacks.Callback):
   def on_epoch_end(self, epoch, logs={}):
-    self.max_acc = logs.get('accuracy') if logs.get('accuracy') > self.max_acc else self.max_acc
-
-    self.max_val_acc = logs.get('val_accuracy') if logs.get('val_accuracy') > self.max_val_acc else self.max_val_acc
-
-    if logs.get('accuracy')>=self.max_acc and logs.get('val_accuracy')>=self.max_val_acc:
-      self.sabar_acc = self.limit_acc
-    else:
-      self.sabar_acc -= 1
-
-    if logs.get('loss')>0.75 or logs.get('val_loss')>0.75:
-      self.sabar_loss -= 1
-    else:
-      self.sabar_loss += self.limit_loss
-
-    if self.sabar_acc == 0:
-      print(f"The model accuracy has been below {self.max_acc} and {self.max_val_acc} for {self.limit_acc} epochs, Stopping training immediatly!!!")
-      self.model.stop_training = True
-    elif self.sabar_loss == 0:
-      print(f"The model loss has been above 75% for {self.limit_loss} epochs, Stopping training immediatly!!!")
-      self.model.stop_training = True
-    elif logs.get('accuracy') >= 0.92 and logs.get('val_accuracy') >= 0.92:
+    if logs.get('accuracy') >= 0.92 and logs.get('val_accuracy') >= 0.92:
       print(f"The model accuracy has reached 92%, stopping training")
       self.model.stop_training = True
 
-stop_early = SantaiDuluGakSih(sabar_acc=5, sabar_loss=10)
+model_complete = SudahWoi()
+
+from tensorflow.keras.callbacks import EarlyStopping
+stop_early = EarlyStopping(patience=5, monitor="val_accuracy", restore_best_weights=True)
 
 class learningrateLogger(tf.keras.callbacks.Callback):
   def on_epoch_end(self, epoch, logs=None):
@@ -186,7 +161,7 @@ lr_log = learningrateLogger()
 from tensorflow.keras.callbacks import ReduceLROnPlateau
 reduce_lr = ReduceLROnPlateau(
     monitor="val_accuracy",
-    factor=0.6,
+    factor=0.7,
     patience=2,
     verbose=1,
     mode="max",
@@ -210,18 +185,21 @@ model.add(Input(shape=(IMG_SHAPE)))
 model.add(data_augmentation)
 model.add(rescale)
 model.add(base_model)
+model.add(BatchNormalization())
 model.add(Conv2D(64, (3,3), activation=tf.nn.relu))
 model.add(MaxPooling2D(2,2))
-model.add(Dropout(0.4))
+model.add(Dropout(0.2))
+model.add(BatchNormalization())
 model.add(GlobalAveragePooling2D())
-model.add(Dense(256, activation=tf.nn.relu))
+model.add(Dense(512, activation=tf.nn.relu, kernel_regularizer=l2(0.001)))
 model.add(Dense(12, activation=tf.nn.softmax))
 
 model.summary()
 
-int_lr = 1e-3
+int_lr = 1e-4
+optimizer = tf.keras.optimizers.Adam(int_lr)
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(int_lr),
+    optimizer=optimizer,
     loss='sparse_categorical_crossentropy',
     metrics=['accuracy']
 )
@@ -235,7 +213,7 @@ modelku = model.fit(
     epochs=initial_epochs,
     validation_data=validation_dataset,
     verbose=2,
-    callbacks=[stop_early, reduce_lr, lr_log]
+    callbacks=[stop_early, model_complete]
 )
 
 """### plot transfer learning"""
@@ -282,7 +260,7 @@ model.compile(
 
 model.summary()
 
-fine_tune_epochs = 10
+fine_tune_epochs = 15
 total_epochs = initial_epochs + fine_tune_epochs
 
 modelku_fine = model.fit(
@@ -291,7 +269,7 @@ modelku_fine = model.fit(
     initial_epoch=modelku.epoch[-1],
     validation_data=validation_dataset,
     verbose=2,
-    callbacks=[stop_early, reduce_lr, lr_log]
+    callbacks=[stop_early, reduce_lr, lr_log, model_complete]
 )
 
 """### plot fine tuning"""
@@ -300,12 +278,13 @@ acc += modelku_fine.history['accuracy']
 val_acc += modelku_fine.history['val_accuracy']
 
 loss += modelku_fine.history['loss']
-val_loss += modelku_fine.history['loss']
+val_loss += modelku_fine.history['val_loss']
 
 plt.figure(figsize=(8, 8))
 plt.subplot(2, 1, 1)
 plt.plot(acc, label='Training Accuracy')
 plt.plot(val_acc, label='Validation Accuracy')
+plt.ylim([0, 1.0])
 plt.plot([initial_epochs-1,initial_epochs-1],
           plt.ylim(), label='Start Fine Tuning')
 plt.legend(loc='lower right')
@@ -314,6 +293,7 @@ plt.title('Training and Validation Accuracy')
 plt.subplot(2, 1, 2)
 plt.plot(loss, label='Training Loss')
 plt.plot(val_loss, label='Validation Loss')
+plt.ylim([0, 1.0])
 plt.plot([initial_epochs-1,initial_epochs-1],
          plt.ylim(), label='Start Fine Tuning')
 plt.legend(loc='upper right')
