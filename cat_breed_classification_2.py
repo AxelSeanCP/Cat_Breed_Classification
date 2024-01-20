@@ -113,11 +113,10 @@ validation_dataset = validation_dataset.prefetch(buffer_size=AUTOTUNE)
 
 data_augmentation = tf.keras.Sequential([
     tf.keras.layers.RandomFlip('horizontal'),
-    tf.keras.layers.RandomRotation(factor=0.2),
     tf.keras.layers.RandomZoom(width_factor=0.2, height_factor=0.2),
     tf.keras.layers.RandomWidth(factor=0.2),
     tf.keras.layers.RandomHeight(factor=0.2),
-    tf.keras.layers.RandomBrightness(factor=0.1)
+    tf.keras.layers.RandomBrightness(factor=0.15)
 ])
 
 """### visualize data augmentation"""
@@ -133,7 +132,6 @@ for image, _ in train_dataset.take(1):
 
 """### rescale pixel values"""
 
-#preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
 rescale = tf.keras.layers.Rescaling(1./127.5, offset=-1)
 
 """# Model Creation
@@ -150,7 +148,7 @@ class SudahWoi(tf.keras.callbacks.Callback):
 model_complete = SudahWoi()
 
 from tensorflow.keras.callbacks import EarlyStopping
-stop_early = EarlyStopping(patience=5, monitor="val_accuracy", restore_best_weights=True)
+stop_early = EarlyStopping(patience=6, monitor="val_accuracy", restore_best_weights=True, verbose=1)
 
 class learningrateLogger(tf.keras.callbacks.Callback):
   def on_epoch_end(self, epoch, logs=None):
@@ -186,20 +184,22 @@ model.add(data_augmentation)
 model.add(rescale)
 model.add(base_model)
 model.add(BatchNormalization())
-model.add(Conv2D(64, (3,3), activation=tf.nn.relu))
+model.add(Conv2D(96, (3,3), activation=tf.nn.relu))
 model.add(MaxPooling2D(2,2))
-model.add(Dropout(0.2))
+model.add(Dropout(0.5))
 model.add(BatchNormalization())
 model.add(GlobalAveragePooling2D())
-model.add(Dense(512, activation=tf.nn.relu, kernel_regularizer=l2(0.001)))
+model.add(Dense(256, activation=tf.nn.relu))
+model.add(BatchNormalization())
+model.add(Dense(64, activation=tf.nn.relu))
+model.add(BatchNormalization())
 model.add(Dense(12, activation=tf.nn.softmax))
 
 model.summary()
 
-int_lr = 1e-4
-optimizer = tf.keras.optimizers.Adam(int_lr)
+int_lr = 1e-3
 model.compile(
-    optimizer=optimizer,
+    optimizer=tf.keras.optimizers.SGD(learning_rate=int_lr),
     loss='sparse_categorical_crossentropy',
     metrics=['accuracy']
 )
@@ -253,7 +253,7 @@ for layer in base_model.layers[:fine_tune_di]:
   layer.trainable = False
 
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(int_lr/10),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=int_lr/10),
     loss='sparse_categorical_crossentropy',
     metrics=['accuracy']
 )
@@ -284,19 +284,15 @@ plt.figure(figsize=(8, 8))
 plt.subplot(2, 1, 1)
 plt.plot(acc, label='Training Accuracy')
 plt.plot(val_acc, label='Validation Accuracy')
-plt.ylim([0, 1.0])
-plt.plot([initial_epochs-1,initial_epochs-1],
-          plt.ylim(), label='Start Fine Tuning')
 plt.legend(loc='lower right')
+plt.ylabel('Accuracy')
 plt.title('Training and Validation Accuracy')
 
 plt.subplot(2, 1, 2)
 plt.plot(loss, label='Training Loss')
 plt.plot(val_loss, label='Validation Loss')
-plt.ylim([0, 1.0])
-plt.plot([initial_epochs-1,initial_epochs-1],
-         plt.ylim(), label='Start Fine Tuning')
 plt.legend(loc='upper right')
+plt.ylabel('Cross Entropy')
 plt.title('Training and Validation Loss')
 plt.xlabel('epoch')
 plt.show()
@@ -306,25 +302,26 @@ plt.show()
 loss, accuracy = model.evaluate(validation_dataset)
 print('Validation accuracy :', accuracy)
 
-# Commented out IPython magic to ensure Python compatibility.
+"""### predict image"""
+
 from google.colab import files
+uploaded = files.upload()
+
+# Commented out IPython magic to ensure Python compatibility.
 from tensorflow.keras.preprocessing import image
 import matplotlib.image as mpimg
 # %matplotlib inline
 
-uploaded = files.upload()
-
 class_labels = ['Abyssinian', 'Bengal', 'Birman', 'Bombay', 'British Shorthair', 'Egyptian Mau',
                 'Maine Coon', 'Persian', 'Ragdoll', 'Russian Blue', 'Siamese', 'Sphynx']
 
-for fn in uploaded.keys():
+fig , axs = plt.subplots(1, len(uploaded), figsize=(15,5))
+
+for i, fn in enumerate(uploaded.keys()):
 
   #predict gambar
   path = fn
   img = image.load_img(path, target_size=IMG_SIZE)
-
-  imgplot = plt.imshow(img)
-  plt.show()
 
   x = image.img_to_array(img)
   x = np.expand_dims(x, axis=0)
@@ -336,8 +333,11 @@ for fn in uploaded.keys():
 
   predicted_label = class_labels[predicted_index]
 
-  print(f"Predicted Class: {predicted_label}")
-  print(f"Confidence Score: {confidence_score}")
+  axs[i].imshow(img)
+  axs[i].set_title(f"Predicted: {predicted_label}\nConfidence: {confidence_score:.2f}")
+  axs[i].axis('off')
+
+plt.show()
 
 """# Save Model"""
 
