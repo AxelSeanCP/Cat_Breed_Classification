@@ -21,3 +21,6 @@ A machine learning image classification project to detect cat breeds from dicodi
 - dataset has minimum **10000 images** and **3 class**
 - image resolution in dataset is not constant (varies)
 - accuracy on training and validation set is **92% minimum**
+
+## Model Prediction
+![image of the model prediction result](/predict_result/result.png)
