@@ -19,14 +19,12 @@ Original file is located at
 """### import libraries"""
 
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Dense, Flatten, Dropout, Conv2D, MaxPooling2D, BatchNormalization, Input, GlobalAveragePooling2D
+from tensorflow.keras.layers import Dense, Dropout, Conv2D, MaxPooling2D, BatchNormalization, Input, GlobalAveragePooling2D
 from tensorflow.keras.regularizers import l2, l1
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
-import pathlib, zipfile, os, splitfolders, datetime
+import pathlib, os, splitfolders
 import opendatasets as od
 
 """### download dataset"""
@@ -113,9 +111,10 @@ validation_dataset = validation_dataset.prefetch(buffer_size=AUTOTUNE)
 
 data_augmentation = tf.keras.Sequential([
     tf.keras.layers.RandomFlip('horizontal'),
+    tf.keras.layers.RandomRotation(factor=0.1),
     tf.keras.layers.RandomZoom(width_factor=0.2, height_factor=0.2),
-    tf.keras.layers.RandomWidth(factor=0.1),
-    tf.keras.layers.RandomHeight(factor=0.1),
+    tf.keras.layers.RandomWidth(factor=0.15),
+    tf.keras.layers.RandomHeight(factor=0.15),
     tf.keras.layers.RandomBrightness(factor=0.15)
 ])
 
@@ -168,6 +167,7 @@ reduce_lr = ReduceLROnPlateau(
 
 """### create base model"""
 
+from tensorflow.keras.applications import MobileNetV2
 IMG_SHAPE = IMG_SIZE + (3,)
 
 base_model = MobileNetV2(
@@ -184,15 +184,15 @@ model.add(data_augmentation)
 model.add(rescale)
 model.add(base_model)
 model.add(BatchNormalization())
-model.add(Conv2D(96, (3,3), activation=tf.nn.relu))
+model.add(Conv2D(128, (3,3), activation=tf.nn.relu))
 model.add(MaxPooling2D(2,2))
-model.add(Dropout(0.3))
+model.add(Dropout(0.4))
 model.add(BatchNormalization())
 model.add(GlobalAveragePooling2D())
-model.add(Dense(512, activation=tf.nn.relu))
-model.add(Dropout(0.3))
+model.add(Dense(256, activation=tf.nn.relu))
+model.add(Dropout(0.2))
 model.add(BatchNormalization())
-model.add(Dense(128, activation=tf.nn.relu))
+model.add(Dense(64, activation=tf.nn.relu))
 model.add(BatchNormalization())
 model.add(Dense(12, activation=tf.nn.softmax))
 
@@ -200,7 +200,7 @@ model.summary()
 
 int_lr = 1e-3
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=int_lr),
+    optimizer=tf.keras.optimizers.SGD(learning_rate=int_lr, momentum=0.9),
     loss='sparse_categorical_crossentropy',
     metrics=['accuracy']
 )
@@ -214,7 +214,7 @@ modelku = model.fit(
     epochs=initial_epochs,
     validation_data=validation_dataset,
     verbose=2,
-    callbacks=[model_complete]
+    callbacks=[stop_early, model_complete]
 )
 
 """### plot transfer learning"""
@@ -254,7 +254,7 @@ for layer in base_model.layers[:fine_tune_di]:
   layer.trainable = False
 
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=int_lr/10),
+    optimizer=tf.keras.optimizers.SGD(learning_rate=int_lr/10, momentum=0.9),
     loss='sparse_categorical_crossentropy',
     metrics=['accuracy']
 )
