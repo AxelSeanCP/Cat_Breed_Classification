@@ -114,8 +114,7 @@ data_augmentation = tf.keras.Sequential([
     tf.keras.layers.RandomRotation(factor=0.1),
     tf.keras.layers.RandomZoom(width_factor=0.2, height_factor=0.2),
     tf.keras.layers.RandomWidth(factor=0.15),
-    tf.keras.layers.RandomHeight(factor=0.15),
-    tf.keras.layers.RandomBrightness(factor=0.15)
+    tf.keras.layers.RandomHeight(factor=0.15)
 ])
 
 """### visualize data augmentation"""
@@ -192,7 +191,10 @@ model.add(GlobalAveragePooling2D())
 model.add(Dense(256, activation=tf.nn.relu))
 model.add(Dropout(0.2))
 model.add(BatchNormalization())
+model.add(Dense(128, activation=tf.nn.relu))
+model.add(BatchNormalization())
 model.add(Dense(64, activation=tf.nn.relu))
+model.add(Dropout(0.2))
 model.add(BatchNormalization())
 model.add(Dense(12, activation=tf.nn.softmax))
 
