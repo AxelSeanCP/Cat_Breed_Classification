@@ -1,4 +1,4 @@
-# ML-ImageClassification
+# Cat_Breed_Classification
 A machine learning image classification project to detect cat breeds from dicoding machine learning course
 
 ## Dataset
