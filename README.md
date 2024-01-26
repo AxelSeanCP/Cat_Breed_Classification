@@ -31,4 +31,4 @@ A machine learning image classification project to detect cat breeds from dicodi
 - accuracy on training and validation set is **92% minimum**
 
 ## Model Prediction
-![image of the model prediction result](/predict_result/result.png)
+![image of the model prediction result](predict_result.png)
