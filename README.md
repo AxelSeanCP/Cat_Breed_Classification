@@ -6,6 +6,14 @@ A machine learning image classification project to detect cat breeds from dicodi
 * about : this dataset contains 12 differents cat breeds
 * samples : 10k images in total from 12 subfolders (class), all the images have different image resolution
 
+## Files
+- image_predict &rarr; folder of the images used for prediction
+- old_code &rarr; folder containing old files 
+- predict_result &rarr; result image file of the prediction
+- cat_breed_classification_2.ipynb &rarr; notebook file for the project 
+- cat_breed_classification_2.py &rarr; python file for the project
+- vegs.tflite &rarr; the saved model ready to be deployed to Android
+
 ## Criteria
 - free dataset with **1000 images minimum**
 - dataset **has never been used** in previous machine learning class submissions
